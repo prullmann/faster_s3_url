@@ -47,6 +47,7 @@ signer.presigned_url("my/object/key.jpg",
 ```
 
 Use a CNAME or CDN or any other hostname variant other than the default this gem will come up with? Just pass in a `host` argument to initializer. Will work with both public and presigned URLs.
+You can also prefix the hostname with `http://`, eg for development setups.
 
 ```ruby
 builder = FasterS3Url::Builder.new(

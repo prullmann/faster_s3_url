@@ -20,13 +20,14 @@ module FasterS3Url
 
     MAX_CACHED_SIGNING_KEYS = 5
 
-    attr_reader :bucket_name, :region, :host, :access_key_id
+    attr_reader :bucket_name, :region, :host, :protocol, :access_key_id
 
     # @option params [String] :bucket_name required
     #
     # @option params [String] :region eg "us-east-1", required
     #
-    # @option params[String] :host optional, host to use in generated URLs. If empty, will construct default AWS S3 host for bucket name and region.
+    # @option params[String] :host optional, host to use in generated URLs. If empty, will construct default AWS S3 host for
+    #   bucket name and region. If host does not contain a protocol, will use https://
     #
     # @option params [String] :access_key_id required at present, change to allow look up from environment using standard aws sdk routines?
     #
@@ -41,7 +42,6 @@ module FasterS3Url
     def initialize(bucket_name:, region:, access_key_id:, secret_access_key:, host:nil, default_public: true, cache_signing_keys: false)
       @bucket_name = bucket_name
       @region = region
-      @host = host || default_host(bucket_name)
       @default_public = default_public
       @access_key_id = access_key_id
       @secret_access_key = secret_access_key
@@ -49,13 +49,13 @@ module FasterS3Url
       if @cache_signing_keys
         @signing_key_cache = {}
       end
-
+      @protocol, @host = host_option_parts(host)
 
       @canonical_headers = "host:#{@host}\n"
     end
 
     def public_url(key)
-      "https://#{self.host}/#{uri_escape_key(key)}"
+      "#{self.protocol}#{self.host}/#{uri_escape_key(key)}"
     end
 
     # Generates a presigned GET URL for a specified S3 object key.
@@ -151,7 +151,7 @@ module FasterS3Url
       signing_key = retrieve_signing_key(datestamp)
       signature = OpenSSL::HMAC.hexdigest("SHA256", signing_key, string_to_sign)
 
-      return "https://" + self.host + canonical_uri + "?" + canonical_query_string + "&X-Amz-Signature=" + signature
+      return self.protocol + self.host + canonical_uri + "?" + canonical_query_string + "&X-Amz-Signature=" + signature
     end
 
     # just a convenience method that can call public_url or presigned_url based on flag
@@ -232,7 +232,17 @@ module FasterS3Url
       end
     end
 
-    def default_host(bucket_name)
+    def host_option_parts(host_option)
+      # accept host with or without protocol or use default
+      prot, host = /^(https?:\/\/)?(.*)$/.match(host_option)&.captures
+
+      prot = prot || "https://"
+      host = host || default_host
+      
+      [prot.freeze, host.freeze]
+    end
+
+    def default_host
       if region == "us-east-1"
         # use legacy one without region, as S3 seems to
         "#{bucket_name}.s3.amazonaws.com".freeze
