@@ -27,10 +27,14 @@ module FasterS3Url
     # @option params [String] :region eg "us-east-1", required
     #
     # @option params[String] :endpoint optional, protocol and hostname to use in generated URLs. If empty, will use default AWS S3 host for
-    #   region. In either case, the hostname will be prefixed with the bucket name. This option is useful for S3 compatible servers like Minio.
+    #   region. In either case, the hostname will be prefixed with the bucket name unless `force_path_style` is set, too.
+    #   These options are useful for S3 compatible servers like Minio.
     #
-    # @option params[String] :host optional, host to use in generated URLs. If empty, will use endpoint or construct default AWS S3 host for
-    #   bucket name and region. If host does not contain a protocol, will use https://
+    # @option params[String] :host optional, host to use in generated GET URLs. If empty, will use `endpoint` or construct default AWS S3 host
+    #   for bucket name and region. host can contain a protocol which defaults to https://
+    #
+    # @option params [boolean] :force_path_style (false) If set to true, the bucket name will be part of the path, rather than the hostnane.
+    #   This is useful in combination with the `endpoint` option for alternative S3 servers like Minio.
     #
     # @option params [String] :access_key_id required at present, change to allow look up from environment using standard aws sdk routines?
     #
@@ -42,9 +46,10 @@ module FasterS3Url
     #   be cached and re-used, improving performance when generating mulitple presigned urls with a single Builder by around 50%.
     #   NOTE WELL: This will make the Builder no longer technically concurrency-safe for sharing between multiple threads, is one
     #   reason it is not on by default.
-    def initialize(bucket_name:, region:, access_key_id:, secret_access_key:, endpoint:nil, host:nil, default_public: true, cache_signing_keys: false)
+    def initialize(bucket_name:, region:, access_key_id:, secret_access_key:, endpoint:nil, host:nil, force_path_style: false, default_public: true, cache_signing_keys: false)
       @bucket_name = bucket_name
       @region = region
+      @force_path_style = force_path_style
       @default_public = default_public
       @access_key_id = access_key_id
       @secret_access_key = secret_access_key
@@ -58,7 +63,8 @@ module FasterS3Url
     end
 
     def public_url(key)
-      "#{self.protocol}#{self.host}/#{uri_escape_key(key)}"
+      bucket_path_prefix = @force_path_style ? "#{@bucket_name}/" : ""
+      "#{self.protocol}#{self.host}/#{bucket_path_prefix}#{uri_escape_key(key)}"
     end
 
     # Generates a presigned GET URL for a specified S3 object key.
@@ -98,7 +104,8 @@ module FasterS3Url
                         version_id: nil)
       validate_expires_in(expires_in)
 
-      canonical_uri = "/" + uri_escape_key(key)
+      bucket_path_prefix = @force_path_style ? "#{@bucket_name}/" : ""
+      canonical_uri = "/" + bucket_path_prefix + uri_escape_key(key)
 
       now = time ? time.dup.utc : Time.now.utc # Uh Time#utc is mutating, not nice to do to an argument!
       amz_date  = now.strftime("%Y%m%dT%H%M%SZ")
@@ -242,11 +249,11 @@ module FasterS3Url
       prot = prot || "https://"
       [prot.freeze, host.freeze]
     end
-      
+
     def split_endpoint(endpoint_option)
       return unless endpoint_option
       prot, host = /^(https?:\/\/)(.*)$/.match(endpoint_option)&.captures
-      host = "#{bucket_name}.#{host}"
+      host = "#{bucket_name}.#{host}" unless @force_path_style
       [prot.freeze, host.freeze]
     end
 
@@ -254,7 +261,7 @@ module FasterS3Url
       # use legacy one without region for us-east-1, as S3 seems to do
       host = "s3.#{region}.amazonaws.com"
       host = "s3.amazonaws.com" if region == "us-east-1"
-      host = "#{bucket_name}.#{host}"
+      host = "#{bucket_name}.#{host}" unless @force_path_style
       ["https://".freeze, host.freeze]
     end
 

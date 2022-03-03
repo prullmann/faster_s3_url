@@ -12,6 +12,7 @@ RSpec.describe FasterS3Url do
   let(:region) { "us-east-1"}
   let(:endpoint) { nil }
   let(:host) { nil }
+  let(:force_path_style) { false }
 
   let(:aws_client) { Aws::S3::Client.new(region: region, access_key_id: access_key_id, secret_access_key: secret_access_key) }
   let(:aws_bucket) { Aws::S3::Bucket.new(name: bucket_name, client: aws_client)}
@@ -21,6 +22,7 @@ RSpec.describe FasterS3Url do
                               region: region,
                               endpoint: endpoint,
                               host: host,
+                              force_path_style: force_path_style,
                               access_key_id: access_key_id,
                               secret_access_key: secret_access_key)
   }
@@ -64,15 +66,15 @@ RSpec.describe FasterS3Url do
       end
     end
 
-    describe "with custom host or endpoint" do
+    describe "with custom host" do
       # The AWS S3 SDK has no host option, so we have to use endpoint for testing instead.
       # Since endpoint is prefixed with the bucket name, we have to do it for the host as well.
       # Setting disable_host_prefix_injection sounds better, but I couldn't get it to work.
-      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: endpoint, access_key_id: access_key_id, secret_access_key: secret_access_key) }
+      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: s3_endpoint, access_key_id: access_key_id, secret_access_key: secret_access_key) }
 
-      describe "host" do
+      describe "without protocol" do
         let(:host) { "#{bucket_name}.my.example.com" }
-        let(:endpoint) { "https://my.example.com" }
+        let(:s3_endpoint) { "https://my.example.com" }
   
         it "is correct" do
           expect(builder.public_url(object_key)).to eq("https://#{host}/#{object_key}")
@@ -80,15 +82,19 @@ RSpec.describe FasterS3Url do
         end
       end
 
-      describe "host with http" do
+      describe "with 'http'" do
         let(:host) { "http://#{bucket_name}.my.example.com" }
-        let(:endpoint) { "http://my.example.com" }
+        let(:s3_endpoint) { "http://my.example.com" }
   
         it "is correct" do
           expect(builder.public_url(object_key)).to eq("#{host}/#{object_key}")
           expect(builder.public_url(object_key)).to eq(aws_bucket.object(object_key).public_url)
         end
       end
+    end
+
+    describe "with endpoint" do
+      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: endpoint, access_key_id: access_key_id, secret_access_key: secret_access_key) }
 
       describe "endpoint" do
         let(:endpoint) { "https://my.example.com" }
@@ -106,6 +112,41 @@ RSpec.describe FasterS3Url do
   
         it "is correct" do
           expect(builder.public_url(object_key)).to eq("#{host}/#{object_key}")
+        end
+        it "is different than what aws-sdk-s3 would generate" do
+          expect(builder.public_url(object_key)).not_to eq(aws_bucket.object(object_key).public_url)
+        end
+      end
+    end
+
+    describe "with force_path_style option" do
+      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: endpoint, force_path_style: force_path_style, access_key_id: access_key_id, secret_access_key: secret_access_key) }
+      let(:force_path_style) { true }
+
+      describe "but without host or endpoint" do
+        let(:aws_client) { Aws::S3::Client.new(region: region, force_path_style: force_path_style, access_key_id: access_key_id, secret_access_key: secret_access_key) }
+
+        it "is correct" do
+          expect(builder.public_url(object_key)).to eq("https://s3.amazonaws.com/#{bucket_name}/#{object_key}")
+          expect(builder.public_url(object_key)).to eq(aws_bucket.object(object_key).public_url)
+        end
+      end
+
+      describe "with host" do
+        let(:host) { "my.example.com" }
+        let(:endpoint) { "https://my.example.com" }
+  
+        it "is correct" do
+          expect(builder.public_url(object_key)).to eq("https://#{host}/#{bucket_name}/#{object_key}")
+          expect(builder.public_url(object_key)).to eq(aws_bucket.object(object_key).public_url)
+        end
+      end
+      describe "with endpoint" do
+        let(:endpoint) { "https://my.example.com" }
+  
+        it "is correct" do
+          expect(builder.public_url(object_key)).to eq("#{endpoint}/#{bucket_name}/#{object_key}")
+          expect(builder.public_url(object_key)).to eq(aws_bucket.object(object_key).public_url)
         end
       end
     end
@@ -271,31 +312,65 @@ RSpec.describe FasterS3Url do
       end
     end
 
-    describe "with custom host or endpoint" do
+    describe "with custom host" do
       # The AWS S3 SDK has no host option, so we have to use endpoint for testing instead.
       # Since endpoint is prefixed with the bucket name, we have to do it for the host as well.
       # Setting disable_host_prefix_injection sounds better, but I couldn't get it to work.
-      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: endpoint, access_key_id: access_key_id, secret_access_key: secret_access_key) }
+      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: s3_endpoint, access_key_id: access_key_id, secret_access_key: secret_access_key) }
 
-      describe "host" do
+      describe "without protocol" do
         let(:host) { "#{bucket_name}.my.example.com" }
-        let(:endpoint) { "https://my.example.com" }
+        let(:s3_endpoint) { "https://my.example.com" }
 
         it "produces same as aws-sdk" do
           expect(builder.presigned_url(object_key)).to eq(aws_bucket.object(object_key).presigned_url(:get))
         end
       end
 
-      describe "host with http" do
+      describe "with 'http'" do
         let(:host) { "http://#{bucket_name}.my.example.com" }
-        let(:endpoint) { "http://my.example.com" }
+        let(:s3_endpoint) { "http://my.example.com" }
   
         it "produces same as aws-sdk" do
           expect(builder.presigned_url(object_key)).to eq(aws_bucket.object(object_key).presigned_url(:get))
         end
       end
+    end
+
+    describe "with endpoint" do
+      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: endpoint, access_key_id: access_key_id, secret_access_key: secret_access_key) }
 
       describe "endpoint" do
+        let(:endpoint) { "https://my.example.com" }
+  
+        it "is correct" do
+          expect(builder.presigned_url(object_key)).to eq(aws_bucket.object(object_key).presigned_url(:get))
+        end
+      end
+    end
+
+    describe "with force_path_style option" do
+      let(:aws_client) { Aws::S3::Client.new(region: region, endpoint: endpoint, force_path_style: force_path_style, access_key_id: access_key_id, secret_access_key: secret_access_key) }
+      let(:force_path_style) { true }
+
+      describe "but without host or endpoint" do
+        let(:aws_client) { Aws::S3::Client.new(region: region, force_path_style: force_path_style, access_key_id: access_key_id, secret_access_key: secret_access_key) }
+
+        it "is correct" do
+          expect(builder.presigned_url(object_key)).to eq(aws_bucket.object(object_key).presigned_url(:get))
+        end
+      end
+
+      describe "with host" do
+        let(:host) { "my.example.com" }
+        let(:endpoint) { "https://my.example.com" }
+  
+        it "is correct" do
+          expect(builder.presigned_url(object_key)).to eq(aws_bucket.object(object_key).presigned_url(:get))
+        end
+      end
+
+      describe "with endpoint" do
         let(:endpoint) { "https://my.example.com" }
   
         it "is correct" do

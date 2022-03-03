@@ -59,13 +59,15 @@ builder = FasterS3Url::Builder.new(
 )
 ```
 
-Fancy using some other S3 compatible servers like Minio? The usual `endpoint` option is supported here too.
+Fancy using some other S3 compatible servers like [Minio](https://min.io/)? The usual `endpoint` and `force_path_style` options are supported here, too.
+NOTE: While `host` will override `endpoint` for GET URL generation, `endpoint` can still be used by upload logic that uses the same s3 config (eg Shrine, see below).
 
 ```ruby
 builder = FasterS3Url::Builder.new(
   bucket_name: "my-bucket",
-  endpoint: "https://my-store.example.com",
   region: "my-place-1",
+  endpoint: "https://my-store.example.com",
+  force_path_style: true,
   access_key_id: ENV['AWS_ACCESS_KEY'],
   secret_access_key: ENV['AWS_SECRET_KEY']
 )
