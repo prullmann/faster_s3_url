@@ -46,7 +46,7 @@ signer.presigned_url("my/object/key.jpg",
 )
 ```
 
-Use a CNAME or CDN or any other hostname variant other than the default this gem will come up with? Just pass in a `host` argument to initializer. Will work with both public and presigned URLs.
+Use a CNAME or CDN or any other hostname variant other than the default this gem will come up with? Just pass in a `host` argument to initializer. Will work with both public and presigned GET URLs.
 You can also prefix the hostname with `http://`, eg for development setups.
 
 ```ruby
@@ -54,6 +54,18 @@ builder = FasterS3Url::Builder.new(
   bucket_name: "my-bucket.example.com",
   host: "my-bucket.example.com",
   region: "us-east-1",
+  access_key_id: ENV['AWS_ACCESS_KEY'],
+  secret_access_key: ENV['AWS_SECRET_KEY']
+)
+```
+
+Fancy using some other S3 compatible servers like Minio? The usual `endpoint` option is supported here too.
+
+```ruby
+builder = FasterS3Url::Builder.new(
+  bucket_name: "my-bucket",
+  endpoint: "https://my-store.example.com",
+  region: "my-place-1",
   access_key_id: ENV['AWS_ACCESS_KEY'],
   secret_access_key: ENV['AWS_SECRET_KEY']
 )

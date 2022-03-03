@@ -39,6 +39,7 @@ module FasterS3Url
           access_key_id: options[:access_key_id],
           secret_access_key: options[:secret_access_key],
           region: options[:region],
+          endpoint: options[:endpoint],
           host: host)
 
         super(**options)

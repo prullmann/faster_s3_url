@@ -26,7 +26,10 @@ module FasterS3Url
     #
     # @option params [String] :region eg "us-east-1", required
     #
-    # @option params[String] :host optional, host to use in generated URLs. If empty, will construct default AWS S3 host for
+    # @option params[String] :endpoint optional, protocol and hostname to use in generated URLs. If empty, will use default AWS S3 host for
+    #   region. In either case, the hostname will be prefixed with the bucket name. This option is useful for S3 compatible servers like Minio.
+    #
+    # @option params[String] :host optional, host to use in generated URLs. If empty, will use endpoint or construct default AWS S3 host for
     #   bucket name and region. If host does not contain a protocol, will use https://
     #
     # @option params [String] :access_key_id required at present, change to allow look up from environment using standard aws sdk routines?
@@ -39,7 +42,7 @@ module FasterS3Url
     #   be cached and re-used, improving performance when generating mulitple presigned urls with a single Builder by around 50%.
     #   NOTE WELL: This will make the Builder no longer technically concurrency-safe for sharing between multiple threads, is one
     #   reason it is not on by default.
-    def initialize(bucket_name:, region:, access_key_id:, secret_access_key:, host:nil, default_public: true, cache_signing_keys: false)
+    def initialize(bucket_name:, region:, access_key_id:, secret_access_key:, endpoint:nil, host:nil, default_public: true, cache_signing_keys: false)
       @bucket_name = bucket_name
       @region = region
       @default_public = default_public
@@ -49,7 +52,7 @@ module FasterS3Url
       if @cache_signing_keys
         @signing_key_cache = {}
       end
-      @protocol, @host = host_option_parts(host)
+      @protocol, @host = split_host(host) || split_endpoint(endpoint) || default_host
 
       @canonical_headers = "host:#{@host}\n"
     end
@@ -232,23 +235,27 @@ module FasterS3Url
       end
     end
 
-    def host_option_parts(host_option)
-      # accept host with or without protocol or use default
+    def split_host(host_option)
+      return unless host_option
+      # accept host with or without protocol
       prot, host = /^(https?:\/\/)?(.*)$/.match(host_option)&.captures
-
       prot = prot || "https://"
-      host = host || default_host
+      [prot.freeze, host.freeze]
+    end
       
+    def split_endpoint(endpoint_option)
+      return unless endpoint_option
+      prot, host = /^(https?:\/\/)(.*)$/.match(endpoint_option)&.captures
+      host = "#{bucket_name}.#{host}"
       [prot.freeze, host.freeze]
     end
 
     def default_host
-      if region == "us-east-1"
-        # use legacy one without region, as S3 seems to
-        "#{bucket_name}.s3.amazonaws.com".freeze
-      else
-        "#{bucket_name}.s3.#{region}.amazonaws.com".freeze
-      end
+      # use legacy one without region for us-east-1, as S3 seems to do
+      host = "s3.#{region}.amazonaws.com"
+      host = "s3.amazonaws.com" if region == "us-east-1"
+      host = "#{bucket_name}.#{host}"
+      ["https://".freeze, host.freeze]
     end
 
     # `def get_signature_key` `from python example at https://docs.aws.amazon.com/general/latest/gr/sigv4-signed-request-examples.html
